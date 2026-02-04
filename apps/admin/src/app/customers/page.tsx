@@ -1,39 +1,72 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { SearchBar } from '@/components/SearchBar';
 
-export default async function CustomersPage() {
-  const customers = await prisma.customer.findMany({
+interface Props {
+  searchParams: { q?: string };
+}
+
+export default async function CustomersPage({ searchParams }: Props) {
+  const query = searchParams.q?.trim().toLowerCase();
+
+  const allCustomers = await prisma.customer.findMany({
     orderBy: { code: 'asc' },
   });
+
+  // Filter customers based on search query
+  const customers = query
+    ? allCustomers.filter(
+        (c) =>
+          c.code.toLowerCase().includes(query) ||
+          c.businessName.toLowerCase().includes(query) ||
+          (c.taxId && c.taxId.toLowerCase().includes(query))
+      )
+    : allCustomers;
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Clientes</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Listado de clientes registrados en el sistema
-        </p>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Clientes</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Listado de clientes registrados en el sistema
+          </p>
+        </div>
+        <Link
+          href="/customers/new"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Nuevo cliente
+        </Link>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="text-sm font-medium text-slate-500">Total</div>
-          <div className="mt-1 text-2xl font-semibold text-slate-900">{customers.length}</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900">{allCustomers.length}</div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="text-sm font-medium text-slate-500">Lista Público</div>
           <div className="mt-1 text-2xl font-semibold text-blue-600">
-            {customers.filter(c => c.priceList === 'PUBLICO').length}
+            {allCustomers.filter(c => c.priceList === 'PUBLICO').length}
           </div>
         </div>
         <div className="bg-white rounded-xl border border-slate-200 p-4">
           <div className="text-sm font-medium text-slate-500">Lista Gremio/Mayorista</div>
           <div className="mt-1 text-2xl font-semibold text-emerald-600">
-            {customers.filter(c => c.priceList !== 'PUBLICO').length}
+            {allCustomers.filter(c => c.priceList !== 'PUBLICO').length}
           </div>
         </div>
+      </div>
+
+      {/* Search */}
+      <div className="mb-6 max-w-md">
+        <SearchBar placeholder="Buscar por código, razón social o CUIT..." />
       </div>
 
       {/* Table */}
@@ -66,7 +99,9 @@ export default async function CustomersPage() {
                     <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
                     </svg>
-                    <p className="text-sm">No hay clientes registrados</p>
+                    <p className="text-sm">
+                      {query ? 'No se encontraron clientes' : 'No hay clientes registrados'}
+                    </p>
                   </div>
                 </td>
               </tr>
@@ -116,6 +151,11 @@ export default async function CustomersPage() {
             )}
           </tbody>
         </table>
+        {query && customers.length > 0 && (
+          <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-sm text-slate-500">
+            Mostrando {customers.length} de {allCustomers.length} clientes
+          </div>
+        )}
       </div>
     </div>
   );
