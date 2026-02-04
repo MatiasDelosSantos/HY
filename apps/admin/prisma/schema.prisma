@@ -55,6 +55,13 @@ enum DocumentType {
   CREDIT_NOTE    // Nota de crédito (extensión futura)
 }
 
+/// Tipo de movimiento de stock
+enum StockMovementType {
+  ENTRY       // Ingreso de mercadería
+  EXIT        // Egreso por venta
+  ADJUSTMENT  // Ajuste manual (+/-)
+}
+
 /// Estado del documento de venta
 /// Fuente: frmremito.frm:731 (estado = "P")
 /// Fuente: frmcobranza.frm:515 (estado = "C")
@@ -144,6 +151,10 @@ model Product {
   /// Fuente: fabrica.frm:809, MaxLength=50
   manufacturerCode String?   @db.VarChar(50)
 
+  /// Stock actual disponible
+  /// Cantidad de unidades en inventario
+  stock            Int       @default(0)
+
   // Timestamps
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -151,6 +162,7 @@ model Product {
   // Relaciones
   pricing          ProductPricing?
   invoiceItems     InvoiceItem[]
+  stockMovements   StockMovement[]
 
   @@index([code])
   @@index([brand])
@@ -276,6 +288,7 @@ model Invoice {
   // Relaciones
   items             InvoiceItem[]
   paymentAllocations PaymentAllocation[]
+  stockMovements    StockMovement[]
 
   @@index([customerId])
   @@index([status])
@@ -419,6 +432,47 @@ model PaymentAllocation {
   @@index([paymentId])
   @@index([invoiceId])
   @@map("payment_allocations")
+}
+
+/// Movimiento de stock (auditoría de inventario)
+/// Registra cada cambio en el stock de un producto
+model StockMovement {
+  id            String            @id @default(uuid()) @db.Uuid
+
+  /// Producto afectado
+  productId     String            @db.Uuid
+  product       Product           @relation(fields: [productId], references: [id])
+
+  /// Tipo de movimiento
+  type          StockMovementType
+
+  /// Cantidad del movimiento (positivo para ingreso, negativo para egreso)
+  quantity      Int
+
+  /// Stock antes del movimiento
+  previousStock Int
+
+  /// Stock después del movimiento
+  newStock      Int
+
+  /// Motivo/observación del movimiento
+  reason        String?           @db.VarChar(255)
+
+  /// Referencia a factura si es egreso por venta
+  invoiceId     String?           @db.Uuid
+  invoice       Invoice?          @relation(fields: [invoiceId], references: [id])
+
+  /// Usuario que realizó el movimiento (futuro)
+  createdBy     String?           @db.VarChar(100)
+
+  // Timestamps
+  createdAt     DateTime          @default(now())
+
+  @@index([productId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([invoiceId])
+  @@map("stock_movements")
 }
 
 // =============================================================================

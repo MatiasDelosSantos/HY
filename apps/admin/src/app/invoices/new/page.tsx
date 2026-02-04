@@ -60,6 +60,7 @@ export default async function NewInvoicePage({ searchParams }: Props) {
     publicPrice: p.pricing ? Number(p.pricing.publicPrice) : 0,
     tradePrice: p.pricing ? Number(p.pricing.tradePrice) : 0,
     wholesalePrice: p.pricing ? Number(p.pricing.wholesalePrice) : 0,
+    stock: p.stock,
   }));
 
   const serializedCustomer = {

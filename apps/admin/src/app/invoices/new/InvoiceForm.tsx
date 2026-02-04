@@ -11,6 +11,7 @@ interface Product {
   publicPrice: number;
   tradePrice: number;
   wholesalePrice: number;
+  stock: number;
 }
 
 interface Customer {
@@ -104,6 +105,26 @@ export function InvoiceForm({ customer, products }: Props) {
   }
 
   const hasItems = items.length > 0 && items.some((i) => i.productId && i.quantity > 0);
+
+  // Check for stock warnings
+  function getStockWarnings() {
+    const warnings: { code: string; description: string; requested: number; available: number }[] = [];
+    for (const item of items) {
+      if (!item.productId || item.quantity <= 0) continue;
+      const product = products.find((p) => p.id === item.productId);
+      if (product && item.quantity > product.stock) {
+        warnings.push({
+          code: product.code,
+          description: product.description,
+          requested: item.quantity,
+          available: product.stock,
+        });
+      }
+    }
+    return warnings;
+  }
+
+  const stockWarnings = getStockWarnings();
 
   return (
     <>
@@ -213,10 +234,15 @@ export function InvoiceForm({ customer, products }: Props) {
                         <option value="">Seleccionar producto...</option>
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.code} - {p.description}
+                            {p.code} - {p.description} (Stock: {p.stock})
                           </option>
                         ))}
                       </select>
+                      {product && item.quantity > product.stock && (
+                        <div className="mt-1 text-xs text-amber-600">
+                          Stock insuficiente (disponible: {product.stock})
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-3">
                       <input
@@ -269,6 +295,30 @@ export function InvoiceForm({ customer, products }: Props) {
           </table>
         )}
       </div>
+
+      {/* Stock warnings */}
+      {stockWarnings.length > 0 && (
+        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div>
+              <h4 className="text-sm font-medium text-amber-800">Stock insuficiente</h4>
+              <ul className="mt-1 text-sm text-amber-700">
+                {stockWarnings.map((w, i) => (
+                  <li key={i}>
+                    {w.code} - {w.description}: solicitado {w.requested}, disponible {w.available}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-amber-600">
+                Puede continuar con la factura. El stock quedará en negativo.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-3">

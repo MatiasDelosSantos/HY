@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/customers', label: 'Clientes', icon: 'users' },
   { href: '/products', label: 'Productos', icon: 'box' },
+  { href: '/products/stock', label: 'Stock', icon: 'package' },
   { href: '/invoices', label: 'Facturas', icon: 'file-text' },
   { href: '/payments', label: 'Pagos', icon: 'credit-card' },
 ];
@@ -20,6 +21,11 @@ function NavIcon({ name }: { name: string }) {
     box: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+      </svg>
+    ),
+    package: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
       </svg>
     ),
     'file-text': (
@@ -57,7 +63,9 @@ export function Sidebar() {
           </span>
         </div>
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            pathname === item.href ||
+            (item.href === '/products/stock' && pathname.includes('/stock'));
           return (
             <Link
               key={item.href}

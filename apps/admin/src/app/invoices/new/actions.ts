@@ -64,20 +64,77 @@ export async function createInvoice(input: CreateInvoiceInput) {
   }
   const invoiceNumber = prefix + nextSeq.toString().padStart(6, '0');
 
-  const invoice = await prisma.invoice.create({
-    data: {
-      customerId,
-      number: invoiceNumber,
-      date: new Date(),
-      status: 'PENDING',
-      subtotal,
-      discount: 0,
-      tax21: 0,
-      total: subtotal,
-      balance: subtotal,
-      items: { create: itemsData },
-    },
+  // Create invoice with stock movements in a transaction
+  const invoice = await prisma.$transaction(async (tx) => {
+    // Create the invoice
+    const inv = await tx.invoice.create({
+      data: {
+        customerId,
+        number: invoiceNumber,
+        date: new Date(),
+        status: 'PENDING',
+        subtotal,
+        discount: 0,
+        tax21: 0,
+        total: subtotal,
+        balance: subtotal,
+        items: { create: itemsData },
+      },
+    });
+
+    // Update stock for each product and create stock movements
+    for (const item of items) {
+      const product = products.find((p) => p.id === item.productId)!;
+      const previousStock = product.stock;
+      const newStock = previousStock - item.quantity;
+
+      // Update product stock
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { stock: newStock },
+      });
+
+      // Create stock movement record
+      await tx.stockMovement.create({
+        data: {
+          productId: item.productId,
+          invoiceId: inv.id,
+          type: 'EXIT',
+          quantity: -item.quantity,
+          previousStock,
+          newStock,
+          reason: `Venta Factura ${invoiceNumber}`,
+        },
+      });
+    }
+
+    return inv;
   });
 
   redirect(`/invoices/${invoice.id}`);
+}
+
+// Check stock availability for items (used by UI to show warnings)
+export async function checkStockAvailability(items: { productId: string; quantity: number }[]) {
+  const products = await prisma.product.findMany({
+    where: { id: { in: items.map((i) => i.productId) } },
+    select: { id: true, code: true, description: true, stock: true },
+  });
+
+  const warnings: { productId: string; code: string; description: string; requested: number; available: number }[] = [];
+
+  for (const item of items) {
+    const product = products.find((p) => p.id === item.productId);
+    if (product && item.quantity > product.stock) {
+      warnings.push({
+        productId: product.id,
+        code: product.code,
+        description: product.description,
+        requested: item.quantity,
+        available: product.stock,
+      });
+    }
+  }
+
+  return warnings;
 }
