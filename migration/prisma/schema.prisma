@@ -1,0 +1,442 @@
+// =============================================================================
+// SCHEMA PRISMA - Sistema HY (Herrajes H. Yrigoyen 825 S.A.)
+// =============================================================================
+// Migración del modelo de dominio VB6/Access a PostgreSQL
+// Modelo congelado - No modificar sin justificación de código legacy
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Estado fiscal del cliente
+/// Fuente: Module1.bas:30-36 (ElegirTipoIVA)
+/// Valores legacy: RI, RN, RM/MT, CF, EX
+enum TaxStatus {
+  RESPONSABLE_INSCRIPTO    // RI - "Responsable Insc."
+  RESPONSABLE_NO_INSCRIPTO // RN - "Responsable No Insc."
+  MONOTRIBUTO              // RM/MT - "Responsable Monotributo"
+  CONSUMIDOR_FINAL         // CF - "Consumidor Final"
+  EXENTO                   // EX - "Exento"
+}
+
+/// Tipo de lista de precios asignada al cliente
+/// Fuente: frmremito.frm:509-515 (determina qué preciolN usar)
+/// Fuente: frmclientes.frm:535 (cboL.Text = rClientes!lista)
+enum PriceListType {
+  PUBLICO    // preciol1 - Precio más alto
+  GREMIO     // preciol2 - Precio intermedio (trade)
+  MAYORISTA  // preciol3 - Precio mayorista
+}
+
+/// Tipo de factura según condición IVA
+/// Fuente: frmclientes.frm:536 (cbofac.Text = rClientes!tipofac)
+enum InvoiceLetterType {
+  A // Responsable Inscripto a Responsable Inscripto
+  B // Responsable Inscripto a Consumidor Final/Monotributo
+  C // Monotributo/Exento
+}
+
+/// Tipo de documento comercial
+/// Fuente: frmremito.frm:719 (tipodoc = "FAC")
+/// Fuente: frmcobranza.frm:432 (tipodoc para recibos)
+enum DocumentType {
+  SALE           // FAC - Factura/Remito de venta
+  RECEIPT        // Rec - Recibo de cobranza
+  CREDIT_NOTE    // Nota de crédito (extensión futura)
+}
+
+/// Estado del documento de venta
+/// Fuente: frmremito.frm:731 (estado = "P")
+/// Fuente: frmcobranza.frm:515 (estado = "C")
+/// Fuente: frmcobranza.frm:431 (estado = "R" para recibos)
+enum InvoiceStatus {
+  PENDING  // P - Pendiente de cobro (resto > 0)
+  PARTIAL  // Parcialmente cobrado (resto > 0 pero < total)
+  PAID     // C - Cobrado totalmente (resto = 0)
+}
+
+// =============================================================================
+// ENTIDADES PRINCIPALES
+// =============================================================================
+
+/// Cliente
+/// Fuente: frmclientes.frm:533-540 (cargar), frmclientes.frm:588-596 (reemplazar)
+/// Tabla legacy: clientes
+model Customer {
+  id           String            @id @default(uuid()) @db.Uuid
+
+  /// Código único del cliente (formato 5 dígitos: "00001")
+  /// Fuente: frmclientes.frm:540, Module1.bas:22 (vcodcli As String * 5)
+  code         String            @unique @db.VarChar(5)
+
+  /// Razón social
+  /// Fuente: frmclientes.frm:533 (txtrazon.Text), MaxLength=150
+  businessName String            @db.VarChar(150)
+
+  /// Dirección
+  /// Fuente: frmclientes.frm:534, MaxLength=150
+  address      String?           @db.VarChar(150)
+
+  /// CUIT (formato XX-XXXXXXXX-X)
+  /// Fuente: frmclientes.frm:537, MaxLength=13
+  taxId        String?           @db.VarChar(13)
+
+  /// Teléfono
+  /// Fuente: frmclientes.frm:539, MaxLength=50
+  phone        String?           @db.VarChar(50)
+
+  /// Condición ante el IVA
+  /// Fuente: frmclientes.frm:538 (cboci.Text = condiva)
+  taxStatus    TaxStatus?
+
+  /// Tipo de factura que corresponde emitir
+  /// Fuente: frmclientes.frm:536 (cbofac.Text = tipofac)
+  invoiceType  InvoiceLetterType?
+
+  /// Lista de precios asignada
+  /// Fuente: frmclientes.frm:535 (cboL.Text = lista)
+  /// Determina qué precio se usa: frmremito.frm:509-515
+  priceList    PriceListType     @default(PUBLICO)
+
+  // Timestamps
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Relaciones
+  invoices     Invoice[]
+  payments     Payment[]
+
+  @@index([code])
+  @@index([businessName])
+  @@index([taxId])
+  @@map("customers")
+}
+
+/// Producto / Artículo
+/// Fuente: fabrica.frm:802-812 (reemplazar), fabrica.frm:817-828 (cargar)
+/// Tabla legacy: Articulos
+model Product {
+  id               String    @id @default(uuid()) @db.Uuid
+
+  /// Código local único (formato 5 dígitos: "00001")
+  /// Fuente: fabrica.frm:802, fabrica.frm:687 (strzero(rContador!codart, 5))
+  code             String    @unique @db.VarChar(5)
+
+  /// Marca del producto
+  /// Fuente: fabrica.frm:803, ComboBox cargado desde: fabrica.frm:877
+  brand            String?   @db.VarChar(100)
+
+  /// Descripción del producto
+  /// Fuente: fabrica.frm:804, MaxLength=150
+  description      String    @db.VarChar(150)
+
+  /// Código de fábrica (código del fabricante/proveedor)
+  /// Fuente: fabrica.frm:809, MaxLength=50
+  manufacturerCode String?   @db.VarChar(50)
+
+  // Timestamps
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relaciones
+  pricing          ProductPricing?
+  invoiceItems     InvoiceItem[]
+
+  @@index([code])
+  @@index([brand])
+  @@index([manufacturerCode])
+  @@map("products")
+}
+
+/// Precios del producto (4 listas + porcentajes de markup)
+/// Fuente: fabrica.frm:805-812 (campos preciolN y porcentajes)
+/// Fuente: fabrica.frm:706-716 (cálculo de precios desde base)
+/// Tabla legacy: campos en Articulos
+model ProductPricing {
+  id              String   @id @default(uuid()) @db.Uuid
+
+  productId       String   @unique @db.Uuid
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// Precio público (lista 1) - Precio más alto
+  /// Fuente: fabrica.frm:805 (preciol1)
+  publicPrice     Decimal  @default(0) @db.Decimal(12, 2)
+
+  /// Precio gremio (lista 2) - Precio para el rubro
+  /// Fuente: fabrica.frm:806 (preciol2)
+  tradePrice      Decimal  @default(0) @db.Decimal(12, 2)
+
+  /// Precio mayorista (lista 3)
+  /// Fuente: fabrica.frm:807 (preciol3)
+  wholesalePrice  Decimal  @default(0) @db.Decimal(12, 2)
+
+  /// Precio base/costo (lista 4) - Base para cálculos
+  /// Fuente: fabrica.frm:808 (preciol4)
+  /// Fórmula: precioListaN = preciol4 + (preciol4 * markup / 100)
+  costPrice       Decimal  @default(0) @db.Decimal(12, 2)
+
+  /// Porcentaje de markup para precio público
+  /// Fuente: fabrica.frm:810 (Publico), fabrica.frm:714
+  publicMarkup    Decimal  @default(0) @db.Decimal(5, 2)
+
+  /// Porcentaje de markup para precio gremio
+  /// Fuente: fabrica.frm:811 (gremio), fabrica.frm:711
+  tradeMarkup     Decimal  @default(0) @db.Decimal(5, 2)
+
+  /// Porcentaje de markup para precio mayorista
+  /// Fuente: fabrica.frm:812 (mayorista), fabrica.frm:708
+  wholesaleMarkup Decimal  @default(0) @db.Decimal(5, 2)
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("product_pricing")
+}
+
+/// Documento comercial (Factura/Remito/Recibo)
+/// Fuente: frmremito.frm:718-733 (guardarfactura)
+/// Fuente: frmcobranza.frm:423-449 (generación de recibos)
+/// Tabla legacy: remitos
+model Invoice {
+  id                String        @id @default(uuid()) @db.Uuid
+
+  /// Tipo de documento
+  /// Fuente: frmremito.frm:719 (tipodoc = "FAC")
+  type              DocumentType  @default(SALE)
+
+  /// Número de documento (formato "X0000-00000000")
+  /// Fuente: frmremito.frm:720 (lbltipofac + lblnrofactura)
+  /// Fuente: frmremito.frm:678 ("0000-" & strzero(rContador!nroremito, 8))
+  number            String        @unique @db.VarChar(20)
+
+  /// Fecha de emisión
+  /// Fuente: frmremito.frm:722 (fecha = Date)
+  date              DateTime      @db.Date
+
+  /// Fecha de vencimiento (por defecto fecha + 30 días)
+  /// Fuente: frmremito.frm:732 (vencimiento = Date + 30)
+  dueDate           DateTime?     @db.Date
+
+  /// Cliente asociado
+  /// Fuente: frmremito.frm:723 (codcli = lblcodcli.Caption)
+  customerId        String        @db.Uuid
+  customer          Customer      @relation(fields: [customerId], references: [id])
+
+  /// Estado del documento
+  /// Fuente: frmremito.frm:731 (estado = "P")
+  /// Fuente: frmcobranza.frm:515 (estado = "C" cuando resto = 0)
+  status            InvoiceStatus @default(PENDING)
+
+  /// Subtotal (suma de items antes de impuestos)
+  /// Fuente: frmremito.frm:726 (subtotal = vSubtotal)
+  subtotal          Decimal       @default(0) @db.Decimal(12, 2)
+
+  /// Bonificación/Descuento aplicado
+  /// Fuente: frmremito.frm:727 (bonif = vBonif)
+  /// Cálculo: frmremito.frm:617-618 (total * bonif / 100)
+  discount          Decimal       @default(0) @db.Decimal(12, 2)
+
+  /// IVA 21%
+  /// Fuente: frmremito.frm:728 (iva21 = vIva21)
+  /// Cálculo: frmremito.frm:599 (vSubtotal * 0.21)
+  tax21             Decimal       @default(0) @db.Decimal(12, 2)
+
+  /// Total del documento
+  /// Fuente: frmremito.frm:729 (total = vtotal)
+  /// Cálculo: frmremito.frm:600 (vSubtotal + vIva21)
+  total             Decimal       @default(0) @db.Decimal(12, 2)
+
+  /// Saldo pendiente de cobro
+  /// Fuente: frmremito.frm:730 (resto = vtotal) - inicial igual a total
+  /// Fuente: frmcobranza.frm:514-518 (se reduce con cada cobranza)
+  balance           Decimal       @default(0) @db.Decimal(12, 2)
+
+  /// Referencia a documento relacionado (ej: recibo referencia a factura)
+  /// Fuente: frmremito.frm:721 (reflejo)
+  /// Fuente: frmcobranza.frm:426 (reflejo = nrodoc de factura pagada)
+  relatedInvoiceId  String?       @db.Uuid
+  relatedInvoice    Invoice?      @relation("InvoiceRelation", fields: [relatedInvoiceId], references: [id])
+  relatedDocuments  Invoice[]     @relation("InvoiceRelation")
+
+  // Timestamps
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relaciones
+  items             InvoiceItem[]
+  paymentAllocations PaymentAllocation[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([date])
+  @@index([number])
+  @@index([type, status])
+  @@map("invoices")
+}
+
+/// Detalle de documento (líneas de factura/remito)
+/// Fuente: frmremito.frm:738-751 (guardado de detalle)
+/// Fuente: frmremito.frm:503-517 (carga desde artículo)
+/// Tabla legacy: remitodetalle
+model InvoiceItem {
+  id          String   @id @default(uuid()) @db.Uuid
+
+  /// Factura/Remito al que pertenece
+  /// Fuente: frmremito.frm:740 (nrodoc)
+  invoiceId   String   @db.Uuid
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  /// Producto vendido
+  /// Relación normalizada (legacy usaba marca+codfab+descripcion desnormalizado)
+  /// Fuente: frmremito.frm:742-744 (marca, codfab, descripcion)
+  productId   String   @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id])
+
+  /// Cantidad vendida
+  /// Fuente: frmremito.frm:745 (cantidad)
+  /// Fuente: frmremito.frm:565 (Data1.Recordset!cantidad)
+  quantity    Decimal  @db.Decimal(10, 2)
+
+  /// Precio unitario (según lista del cliente al momento de la venta)
+  /// Fuente: frmremito.frm:746 (unitario)
+  /// Fuente: frmremito.frm:510-514 (asignado desde preciolN)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+
+  /// Bonificación/descuento por línea (porcentaje)
+  /// Fuente: frmremito.frm:750 (bonif)
+  /// Fuente: frmremito.frm:617-618 (cálculo)
+  discount    Decimal  @default(0) @db.Decimal(5, 2)
+
+  /// Total de la línea (cantidad * unitario - descuento)
+  /// Fuente: frmremito.frm:565 (unitario * cantidad)
+  total       Decimal  @db.Decimal(12, 2)
+
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("invoice_items")
+}
+
+/// Método de pago
+enum PaymentMethod {
+  CASH        // Efectivo
+  TRANSFER    // Transferencia bancaria
+  CARD        // Tarjeta de crédito/débito
+  CHECK       // Cheque
+}
+
+/// Pago/Recibo de cobranza
+/// Fuente: frmcobranza.frm:404-472 (cmdaceptar_Click - proceso completo)
+/// Entidad extraída de Invoice tipo RECEIPT para mejor modelado
+model Payment {
+  id            String   @id @default(uuid()) @db.Uuid
+
+  /// Número de recibo (formato "R555000001")
+  receiptNumber String   @unique @db.VarChar(20)
+
+  /// Fecha del pago
+  date          DateTime @db.Date
+
+  /// Cliente que realiza el pago
+  customerId    String   @db.Uuid
+  customer      Customer @relation(fields: [customerId], references: [id])
+
+  /// Monto total del pago (suma de methodLines)
+  amount        Decimal  @db.Decimal(12, 2)
+
+  /// DEPRECADO: usar methodLines. Mantener para compatibilidad.
+  paymentType   String?  @db.VarChar(20)
+
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relaciones
+  allocations   PaymentAllocation[]
+  methodLines   PaymentMethodLine[]
+
+  @@index([customerId])
+  @@index([date])
+  @@index([receiptNumber])
+  @@map("payments")
+}
+
+/// Línea de método de pago (split)
+/// Un pago puede tener múltiples métodos (ej: $50.000 efectivo + $30.000 transferencia)
+model PaymentMethodLine {
+  id         String        @id @default(uuid()) @db.Uuid
+
+  paymentId  String        @db.Uuid
+  payment    Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  method     PaymentMethod
+  amount     Decimal       @db.Decimal(12, 2)
+
+  createdAt  DateTime      @default(now())
+
+  @@index([paymentId])
+  @@map("payment_method_lines")
+}
+
+/// Imputación de pago a factura
+/// Fuente: frmcobranza.frm:506-538 (dbfactpend_DblClick - lógica de imputación)
+/// Un pago puede imputarse a múltiples facturas
+model PaymentAllocation {
+  id         String   @id @default(uuid()) @db.Uuid
+
+  /// Pago del cual proviene el dinero
+  paymentId  String   @db.Uuid
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  /// Factura a la cual se imputa
+  /// Fuente: frmcobranza.frm:411 (FindFirst "nrodoc='...'")
+  invoiceId  String   @db.Uuid
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+
+  /// Monto imputado a esta factura
+  /// Fuente: frmcobranza.frm:512, 517 (Data1.Recordset!cobrado)
+  /// Lógica: Si saldo >= resto → cobrado = resto; sino → cobrado = saldo
+  amount     Decimal  @db.Decimal(12, 2)
+
+  // Timestamps
+  createdAt  DateTime @default(now())
+
+  @@unique([paymentId, invoiceId])
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+// =============================================================================
+// NOTAS DE MIGRACIÓN
+// =============================================================================
+//
+// Tablas legacy ELIMINADAS (no migrar):
+// - contador: Reemplazado por secuencias de PostgreSQL y UUIDs
+// - TemporalDetalleremito: Estado en memoria (UI)
+// - temporalcobranzas: Estado en memoria (UI)
+//
+// Campos legacy DESNORMALIZADOS que NO se migran:
+// - remitodetalle.razon, remitodetalle.codcli → Usar JOIN con Invoice.Customer
+// - remitodetalle.marca, remitodetalle.descripcion → Usar JOIN con Product
+//
+// Reglas de negocio preservadas:
+// - Precio según lista: Customer.priceList → Product.pricing.{public|trade|wholesale}Price
+// - Cálculo IVA: 21% hardcodeado en frmremito.frm:599 → Configurar en app
+// - Vencimiento: Date + 30 en frmremito.frm:732 → Configurar por cliente
+// - Imputación FIFO: frmcobranza.frm:510-520 → Implementar en PaymentService
+// =============================================================================
