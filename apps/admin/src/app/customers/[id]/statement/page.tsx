@@ -122,10 +122,22 @@ export default async function CustomerStatementPage({ params, searchParams }: Pr
               </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-slate-500">Saldo actual</div>
-            <div className={`text-2xl font-semibold ${finalBalance > 0 ? 'text-red-600' : finalBalance < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-              {formatCurrency(finalBalance)}
+          <div className="flex items-start gap-4">
+            <Link
+              href={`/customers/${customer.id}/statement/print${fromDate || toDate ? `?${fromDate ? `from=${searchParams.from}` : ''}${fromDate && toDate ? '&' : ''}${toDate ? `to=${searchParams.to}` : ''}` : ''}`}
+              target="_blank"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Imprimir
+            </Link>
+            <div className="text-right">
+              <div className="text-sm text-slate-500">Saldo actual</div>
+              <div className={`text-2xl font-semibold ${finalBalance > 0 ? 'text-red-600' : finalBalance < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                {formatCurrency(finalBalance)}
+              </div>
             </div>
           </div>
         </div>

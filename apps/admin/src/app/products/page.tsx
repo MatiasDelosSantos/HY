@@ -43,6 +43,42 @@ export default async function ProductsPage({ searchParams }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="relative group">
+            <button
+              className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Imprimir listado
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-slate-200 py-1 hidden group-hover:block z-10">
+              <Link
+                href="/products/print?list=public"
+                target="_blank"
+                className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Precio Público
+              </Link>
+              <Link
+                href="/products/print?list=trade"
+                target="_blank"
+                className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Precio Gremio
+              </Link>
+              <Link
+                href="/products/print?list=wholesale"
+                target="_blank"
+                className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Precio Mayorista
+              </Link>
+            </div>
+          </div>
           <Link
             href="/products/calculator"
             className="inline-flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"

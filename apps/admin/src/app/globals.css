@@ -18,3 +18,90 @@
     @apply px-6 py-4 whitespace-nowrap text-sm;
   }
 }
+
+/* Print styles */
+@media print {
+  /* Hide non-printable elements */
+  aside,
+  nav,
+  .no-print,
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Reset body for print */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  /* A4 page setup */
+  @page {
+    size: A4;
+    margin: 1.5cm;
+  }
+
+  /* Print layout fills the page */
+  .print-layout {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .print-content {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Table handling */
+  table {
+    page-break-inside: auto;
+    border-collapse: collapse;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-footer-group;
+  }
+
+  /* Avoid breaks after headers */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Print header should appear on every page */
+  .print-header {
+    page-break-inside: avoid;
+  }
+
+  /* Links don't need colors in print */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Remove shadows and backgrounds */
+  * {
+    box-shadow: none !important;
+  }
+
+  /* Ensure borders are visible */
+  .border,
+  .border-slate-200,
+  .border-slate-100 {
+    border-color: #cbd5e1 !important;
+  }
+}
