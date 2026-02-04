@@ -476,6 +476,170 @@ model StockMovement {
 }
 
 // =============================================================================
+// COMPRAS - Proveedores y Facturas de Compra
+// =============================================================================
+
+/// Estado de factura de compra
+enum PurchaseInvoiceStatus {
+  PENDING_REVIEW   // Subida, esperando revisión
+  IN_REVIEW        // Admin revisando/editando
+  APPROVED         // Aprobada
+  REJECTED         // Rechazada
+  PAID             // Pagada
+}
+
+/// Tipo de factura de compra (AFIP)
+enum PurchaseInvoiceType {
+  A   // Factura A
+  B   // Factura B
+  C   // Factura C
+}
+
+/// Proveedor
+model Supplier {
+  id               String   @id @default(uuid()) @db.Uuid
+
+  /// Código único del proveedor (formato 5 dígitos: "00001")
+  code             String   @unique @db.VarChar(5)
+
+  /// Razón social
+  businessName     String   @db.VarChar(150)
+
+  /// Dirección
+  address          String?  @db.VarChar(150)
+
+  /// CUIT (formato XX-XXXXXXXX-X)
+  taxId            String?  @unique @db.VarChar(13)
+
+  /// Teléfono
+  phone            String?  @db.VarChar(50)
+
+  /// Email (usado para login en portal)
+  email            String   @unique @db.VarChar(100)
+
+  /// Hash de contraseña (bcrypt)
+  passwordHash     String   @db.VarChar(255)
+
+  /// Token de sesión activa
+  sessionToken     String?  @db.VarChar(255)
+
+  /// Fecha de expiración de sesión
+  sessionExpiresAt DateTime?
+
+  /// Proveedor activo/inactivo
+  isActive         Boolean  @default(true)
+
+  // Timestamps
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relaciones
+  purchaseInvoices PurchaseInvoice[]
+
+  @@index([code])
+  @@index([email])
+  @@map("suppliers")
+}
+
+/// Factura de compra (recibida de proveedor)
+model PurchaseInvoice {
+  id               String                @id @default(uuid()) @db.Uuid
+
+  /// Proveedor que emitió la factura
+  supplierId       String                @db.Uuid
+  supplier         Supplier              @relation(fields: [supplierId], references: [id])
+
+  /// Tipo de factura (A, B, C)
+  type             PurchaseInvoiceType?
+
+  /// Número de factura (formato "0000-00000000")
+  number           String?               @db.VarChar(20)
+
+  /// Fecha de emisión
+  date             DateTime?             @db.Date
+
+  /// Fecha de vencimiento
+  dueDate          DateTime?             @db.Date
+
+  /// Estado del workflow
+  status           PurchaseInvoiceStatus @default(PENDING_REVIEW)
+
+  /// Subtotal (neto gravado)
+  subtotal         Decimal               @default(0) @db.Decimal(12, 2)
+
+  /// IVA 21%
+  tax21            Decimal               @default(0) @db.Decimal(12, 2)
+
+  /// IVA 10.5%
+  tax105           Decimal               @default(0) @db.Decimal(12, 2)
+
+  /// Total
+  total            Decimal               @default(0) @db.Decimal(12, 2)
+
+  /// Ruta al archivo PDF
+  pdfPath          String                @db.VarChar(500)
+
+  /// Nombre original del archivo
+  originalFileName String                @db.VarChar(255)
+
+  /// Datos extraídos por OCR (JSON: rawText, fields, confidence)
+  extractedData    Json?
+
+  /// Notas del admin
+  adminNotes       String?               @db.Text
+
+  /// Motivo de rechazo
+  rejectionReason  String?               @db.VarChar(500)
+
+  // Timestamps
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  reviewedAt       DateTime?
+  approvedAt       DateTime?
+
+  // Relaciones
+  items            PurchaseInvoiceItem[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([date])
+  @@map("purchase_invoices")
+}
+
+/// Detalle de factura de compra
+model PurchaseInvoiceItem {
+  id                String          @id @default(uuid()) @db.Uuid
+
+  /// Factura de compra
+  purchaseInvoiceId String          @db.Uuid
+  purchaseInvoice   PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+
+  /// Descripción del ítem
+  description       String          @db.VarChar(255)
+
+  /// Cantidad
+  quantity          Decimal         @db.Decimal(10, 2)
+
+  /// Precio unitario
+  unitPrice         Decimal         @db.Decimal(12, 2)
+
+  /// Alícuota de IVA (21, 10.5, 0)
+  taxRate           Decimal         @default(21) @db.Decimal(5, 2)
+
+  /// Total del ítem
+  total             Decimal         @db.Decimal(12, 2)
+
+  /// Producto del inventario (vincular manualmente)
+  productId         String?         @db.Uuid
+
+  // Timestamps
+  createdAt         DateTime        @default(now())
+
+  @@index([purchaseInvoiceId])
+  @@map("purchase_invoice_items")
+}
+
+// =============================================================================
 // NOTAS DE MIGRACIÓN
 // =============================================================================
 //

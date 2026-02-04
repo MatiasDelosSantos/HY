@@ -45,5 +45,9 @@ npm-debug.log*
 *.mdb
 *.accdb
 
+# Uploaded files (keep .gitkeep)
+apps/admin/public/uploads/invoices/*
+!apps/admin/public/uploads/invoices/.gitkeep
+
 # Claude internal
 .claude/
